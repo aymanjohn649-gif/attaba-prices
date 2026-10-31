@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>أسعار قطع الغيار</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#14181f;--mute:#6a7382;--line:#e3e6ec;--ac:#0b6e4f;--acbg:#e3f4ec;--warn:#b42318;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#101319;--card:#1a1f28;--tx:#eef1f6;--mute:#9aa4b5;--line:#2b3240;--ac:#4fd1a1;--acbg:#16332a;--warn:#ff8a80;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:"Segoe UI",Tahoma,Arial,sans-serif;line-height:1.5}
+.wrap{max-width:720px;margin:0 auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+h1{font-size:1.25rem;margin:0}
+.hr{display:flex;gap:6px;align-items:center}
+.pill{font:inherit;font-size:.75rem;padding:3px 10px;border-radius:99px;border:1px solid var(--ac);background:var(--card);color:var(--ac);cursor:pointer;white-space:nowrap}
+.badge{font-size:.75rem;padding:3px 10px;border-radius:99px;background:var(--acbg);color:var(--ac);white-space:nowrap}
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tabs button{flex:1;padding:9px;border:1px solid var(--line);background:var(--card);color:var(--tx);border-radius:10px;font:inherit;cursor:pointer}
+.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+input,select{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 11px;width:100%}
+.bar{display:flex;gap:8px;margin-bottom:12px}.bar select{max-width:140px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.t{font-weight:600}.s{font-size:.8rem;color:var(--mute)}
+.price{font-size:1.15rem;font-weight:700;color:var(--ac);white-space:nowrap}.price small{font-size:.7rem;font-weight:400;color:var(--mute)}
+.edit{display:flex;gap:6px;align-items:center}.edit input{width:92px;text-align:center}
+.x{border:0;background:none;color:var(--warn);cursor:pointer;font-size:1.1rem;padding:4px}
+.add{background:var(--card);border:1px dashed var(--ac);border-radius:12px;padding:12px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.add .full{grid-column:1/-1}
+.btn{padding:10px;border:0;border-radius:10px;background:var(--ac);color:#fff;font:inherit;font-weight:600;cursor:pointer;grid-column:1/-1;width:100%}
+.empty{text-align:center;color:var(--mute);padding:32px 8px}
+.up{color:var(--warn)}.down{color:var(--ac)}
+.flash{animation:f 1.6s}@keyframes f{from{background:var(--acbg)}to{background:var(--card)}}
+#lg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px}
+#lg[hidden]{display:none}
+#lg form{background:var(--card);padding:18px;border-radius:14px;width:100%;max-width:340px;display:grid;gap:10px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:.9rem;z-index:9}
+#toast[hidden]{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>📱 أسعار قطع الغيار</h1>
+    <div class="hr"><button id="vw" class="pill" hidden></button><button id="lb" class="pill">دخول المدير</button></div></header>
+  <div class="tabs"><button id="t1" class="on">الأسعار</button><button id="t2">سجل التعديلات</button></div>
+  <div id="p1">
+    <div id="admin"></div>
+    <div class="bar"><input id="q" placeholder="ابحث: شاشة A52…"><select id="br"><option value="">كل الماركات</option></select></div>
+    <div id="list"><div class="empty">جاري التحميل…</div></div>
+  </div>
+  <div id="p2" hidden><div id="logs"></div></div>
+</div>
+<div id="lg" hidden><form id="lf"><b>دخول المدير</b>
+  <input id="em" type="email" placeholder="الإيميل" autocomplete="username" dir="ltr">
+  <input id="pw" type="password" placeholder="الباسورد" autocomplete="current-password" dir="ltr">
+  <button class="btn">دخول</button><button type="button" id="lc" class="pill">إلغاء</button></form></div>
+<div id="toast" hidden></div>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {getFirestore,collection,doc,setDoc,updateDoc,deleteDoc,addDoc,onSnapshot,query,orderBy,limit,writeBatch} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+const ADMIN="aymanjohn649@gmail.com";
+const app=initializeApp({apiKey:"AIzaSyCAK0RO2Clr8qDbGwYAvpbaP-7hrdF5778",authDomain:"attaba-prices.firebaseapp.com",projectId:"attaba-prices",storageBucket:"attaba-prices.firebasestorage.app",messagingSenderId:"267426551990",appId:"1:267426551990:web:49ee6491d602ad97c26e17"});
+const db=getFirestore(app),auth=getAuth(app);
+const $=i=>document.getElementById(i);
+const B={N:"نوكيا",S:"سامسونج",H:"هواوي",I:"إنفينكس",O:"أوبو",X:"شاومي",V:"فيفو",M:"موتو",T:"TCL"};
+const TYPES=["أصلي","أوريجنال ريفيرب","كوبي"];
+const SEED=`N|C10 C20|OR|315
+N|N105 2019||37
+S|A05|OR|325
+S|A13-A23|B|330
+S|A06|OR|330
+S|J4 OLED2 أسود||290
+S|A20 BIG كاملة|I|360
+S|A20S|OR|325
+S|A30S|INSIL COM|360
+S|A750 A7 2018 كاملة|INCIL|440
+S|A14 5G|OR|330
+S|A22 5G|OR B I|350
+S|A02 A12 M12|B|320
+S|A22 4G|INSIL COM I|400
+S|G531 / G530||200
+S|A30 A50 بالفريم|INSIL I|390
+S|A15 بالفريم|INSEL|430
+S|A04|OR|330
+S|A24|COM INSIL|425
+S|J6 أسود|INSIL B|330
+S|J730 / J7 PRO جولد|INCELL|350
+S|J730 / J7 PRO أسود|INCELL|350
+S|A10S|B|325
+S|A21S|B|330
+S|A70|INSIL COM|440
+S|A16|INSIL COM|460
+S|A03C|OR B|330
+S|A02S-A03S|B|315
+S|T295 أبيض||550
+S|T295 أسود||550
+S|J250 OLD2 جولد||300
+S|J250 OLD2 أسود||300
+S|J7 برايم جولد|OR B|310
+S|J7 برايم أسود|OR B|310
+S|J4+|OR 1*1 B|325
+S|S23-S19-A70-C53 (M HOURS)|OR B 1*1|375
+H|Y8P|HD+|375
+H|Y7A|I|350
+H|8X|COG HD+|340
+H|Y9A 2020|H IC|350
+H|Y5 2018 أسود|LOGO I|310
+H|Y7 2018 أسود||315
+H|P30 LITE|COG|350
+H|Y7P 2020|OR 1*1 B|360
+H|Y7 2019|I OR|340
+H|8C||340
+H|X7A|OR B I|340
+H|Y6 2019|I LOGO|340
+H|Y6P 2020|B|325
+H|T8-8|OR|340
+H|MAT10 LITE أسود||600
+H|P20 LITE|AA|330
+H|Y9 2019|COG HD+|350
+H|X8A|OR|340
+H|NOVA7I|HD+|375
+H|NOVA 3i||350
+H|X6A X5B X5+||330
+H|Y9 PRAIM|HD+|340
+H|X6C|OR 1*1|375
+H|NOVA5T|HD+|350
+I|X557 أسود||290
+I|X559||290
+I|X663|AA|375
+I|X6512|B|325
+I|X6726-X6728|OR B|375
+I|X6812 / 6815|HD+|375
+I|X662|AA|325
+I|X680|B|360
+I|X657|B|310
+I|X693-X697 BIG||410
+I|X612|B I|330
+I|X688|B|360
+I|X652|B|325
+I|X6525|OR|335
+O|RENO4|INSIL|390
+O|A76 / A36|1*1 B OR|350
+O|RENO 2F|INSIL|380
+O|REALME C3 / 6I|B|315
+O|RELMI 8I - 9I - A76|OR|365
+O|A5S|B|315
+O|C55 A60 A3X C65|B|350
+O|RELME 6-7|HD+|360
+O|C30-C33-C30S||325
+O|C53 / C51|B|340
+O|C51 / C53|OR 500+%|400
+O|F11 PRO|OR B|400
+O|A3S|B|320
+O|RENO3 - A73|INSIL|340
+O|RENO7 - 8|INSIL|390
+O|A17-A18-A38-A57 2020|B|330
+O|A54 / A55 / A53 / C17|B|330
+O|A15-A16-C25-C11|B|315
+O|RENO12F - 13F|OR 100%|2600
+O|A1K BIG TP|OR|300
+O|A71 أبيض||300
+O|A71 أسود||300
+O|A92 / A52 / A72|B|350
+O|F5|W|330
+O|F5|B|330
+O|C55 C65 A3X|OR 500+%|400
+O|F7|OR|325
+O|A83 أسود||330
+O|A83 أبيض||330
+O|A54-A53-A55-C17|OR 500+%|390
+O|C61-C63|OR 500+|350
+O|A74-A94-7PRO|INCIL HD+|340
+O|F9|B|325
+O|RENO5|INSIL|390
+X|REDMI 15C|OR|385
+X|REDMI 8 / 8A||320
+X|REDMI 9|B|330
+X|NOT 11S||375
+X|NOT 7|B|320
+X|NOT 8|IB|320
+X|NOT 13 - NOT 14 4G|INSIL|385
+X|A5 NEW 2025|OR|390
+X|NOT 9|B I|330
+X|MI 9T M3|HD+|340
+X|NOT 9S / NOT 9 PRO|IB|330
+X|REDMI NOT10 4G|AA|350
+X|POCO X3|I B|375
+X|NOT 10 5G|OR B|390
+X|REDMI NOT10 PRO||385
+X|MI 13C||340
+X|NOT 12|B I|385
+X|A3 2024 جديد|OR|360
+X|REDMI 12|OR 1*1|390
+X|RED A1+ - A2+|OR|325
+V|Y04|OR 1*1|360
+V|Y18 - Y03|1*1 B OR|360
+V|Y20|B|325
+M|G24 POWER - E14||375
+M|G32 - G73||385
+M|G13 - G23||375
+M|G14 - G54 - G55||375
+T|10L||435`.split("\n").map(l=>{const a=l.split("|");return{brand:B[a[0]],model:a[1],part:"شاشة",type:a[2],price:Number(a[3])}});
+
+let parts=[],logs=[],seen={},first=true,real=false,admin=false,me=null;
+const esc=s=>{const d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML};
+const fmt=n=>Number(n).toLocaleString("ar-EG");
+const label=p=>p.part+" "+p.brand+" "+p.model+(p.type?" ("+p.type+")":"");
+function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,3000)}
+function tab(n){$("p1").hidden=n!=1;$("p2").hidden=n!=2;$("t1").className=n==1?"on":"";$("t2").className=n==2?"on":""}
+$("t1").onclick=()=>tab(1);$("t2").onclick=()=>tab(2);$("q").oninput=render;$("br").onchange=render;
+
+$("lb").onclick=()=>{if(real){signOut(auth)}else{$("lg").hidden=false;$("em").focus()}};
+$("lc").onclick=()=>$("lg").hidden=true;
+$("lf").onsubmit=async e=>{e.preventDefault();
+  try{await signInWithEmailAndPassword(auth,$("em").value.trim(),$("pw").value);$("lg").hidden=true;$("pw").value=""}
+  catch(err){toast("الإيميل أو الباسورد غلط")}};
+$("vw").onclick=()=>{admin=!admin;ui();render()};
+onAuthStateChanged(auth,u=>{me=u;real=!!(u&&u.email&&u.email.toLowerCase()===ADMIN);admin=real;ui();render()});
+
+function ui(){
+  $("lb").textContent=real?"خروج":"دخول المدير";
+  $("vw").hidden=!real;$("vw").textContent=admin?"عرض كمستخدم":"رجوع للتعديل";
+  const a=$("admin");
+  if(!admin){a.innerHTML="";return}
+  a.innerHTML=`<div class="add"><input id="aB" placeholder="الماركة (سامسونج)"><input id="aM" placeholder="الموديل (A52)">
+  <input id="aP" placeholder="القطعة (شاشة)" value="شاشة"><select id="aT">${TYPES.map(t=>`<option>${t}</option>`).join("")}</select>
+  <input id="aR" class="full" type="number" inputmode="numeric" placeholder="سعر البيع (جنيه)">
+  <button class="btn" id="aG">＋ إضافة قطعة</button>
+  ${parts.length?"":'<button class="btn" id="aI" style="background:#555">استيراد الـ '+SEED.length+' شاشة من الفواتير</button>'}</div>`;
+  $("aG").onclick=addPart;if($("aI"))$("aI").onclick=importSeed;
+}
+async function addPart(){
+  const o={brand:$("aB").value.trim(),model:$("aM").value.trim(),part:$("aP").value.trim(),type:$("aT").value,price:Number($("aR").value)};
+  if(!o.brand||!o.model||!o.part||$("aR").value===""||!(o.price>=0))return toast("كمّل كل الخانات");
+  try{await addDoc(collection(db,"parts"),o);await addDoc(collection(db,"log"),{label:label(o),kind:"add",to:o.price,at:Date.now()});
+    ["aB","aM","aR"].forEach(i=>$(i).value="");toast("اتضافت")}catch(e){toast("تعذّر الحفظ")}
+}
+async function importSeed(){
+  try{const b=writeBatch(db);SEED.forEach((o,i)=>b.set(doc(db,"parts","p"+String(i+1).padStart(3,"0")),o));await b.commit();toast("تم الاستيراد")}
+  catch(e){toast("تعذّر الاستيراد")}
+}
+async function setPrice(p,v){v=Number(v);if(!(v>=0)||v===p.price)return;
+  try{await updateDoc(doc(db,"parts",p.id),{price:v});await addDoc(collection(db,"log"),{label:label(p),kind:"edit",from:p.price,to:v,at:Date.now()})}
+  catch(e){toast("تعذّر التعديل")}}
+async function del(p){
+  try{await deleteDoc(doc(db,"parts",p.id));await addDoc(collection(db,"log"),{label:label(p),kind:"del",from:p.price,at:Date.now()})}
+  catch(e){toast("تعذّر الحذف")}}
+
+function render(){
+  const br=$("br"),cur=br.value,brands=[...new Set(parts.map(p=>p.brand))];
+  br.innerHTML='<option value="">كل الماركات</option>'+brands.map(b=>`<option${b===cur?" selected":""}>${esc(b)}</option>`).join("");
+  const q=$("q").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const rows=parts.filter(p=>(!br.value||p.brand===br.value)&&q.every(w=>(p.brand+" "+p.model+" "+p.part+" "+p.type).toLowerCase().includes(w)));
+  const L=$("list");
+  if(!rows.length){L.innerHTML='<div class="empty">'+(parts.length?"مفيش نتائج":"القائمة فاضية لسه.")+"</div>";return}
+  L.innerHTML="";
+  rows.forEach(p=>{
+    const d=document.createElement("div");d.className="card"+(!first&&seen[p.id]!==undefined&&seen[p.id]!==p.price?" flash":"");
+    const info=`<div><div class="t">${esc(p.part)} ${esc(p.brand)} ${esc(p.model)}</div><div class="s">${esc(p.type)}</div></div>`;
+    if(admin){
+      d.innerHTML=info+`<div class="edit"><input type="number" inputmode="numeric" value="${Number(p.price)}"><button class="x">🗑</button></div>`;
+      const i=d.querySelector("input");i.onchange=()=>setPrice(p,i.value);
+      const x=d.querySelector(".x");
+      x.onclick=()=>{if(x.dataset.arm){del(p);return}x.dataset.arm=1;x.textContent="تأكيد الحذف؟";x.style.fontSize=".8rem";
+        setTimeout(()=>{x.dataset.arm="";x.textContent="🗑";x.style.fontSize=""},3000)};
+    }else d.innerHTML=info+`<div class="price">${fmt(p.price)} <small>جنيه</small></div>`;
+    L.appendChild(d);
+  });
+  seen={};parts.forEach(p=>seen[p.id]=p.price);
+}
+function renderLogs(){
+  const L=$("logs");if(!logs.length){L.innerHTML='<div class="empty">مفيش تعديلات لسه.</div>';return}
+  L.innerHTML=logs.map(l=>{
+    const t=new Date(l.at).toLocaleString("ar-EG",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"});
+    const m=l.kind==="edit"?`${fmt(l.from)} ← <b class="${l.to>l.from?"up":"down"}">${fmt(l.to)}</b>`:l.kind==="add"?`أُضيفت بسعر <b>${fmt(l.to)}</b>`:`تم الحذف (كان ${fmt(l.from)})`;
+    return `<div class="card"><div><div class="t">${esc(l.label)}</div><div class="s">${t}</div></div><div>${m}</div></div>`}).join("");
+}
+onSnapshot(query(collection(db,"parts"),orderBy("brand")),s=>{const was=parts.length;parts=s.docs.map(d=>({...d.data(),id:d.id}));if(admin&&(!was)!==(!parts.length))ui();render();first=false},
+  ()=>{$("list").innerHTML='<div class="empty">تعذّر تحميل الأسعار. اتأكد من النت.</div>'});
+onSnapshot(query(collection(db,"log"),orderBy("at","desc"),limit(100)),s=>{logs=s.docs.map(d=>d.data());renderLogs()},()=>{});
+</script>
+</body>
+</html>
